@@ -4,18 +4,18 @@ pragma experimental ABIEncoderV2;
 pragma solidity ^0.8.10;
 
 import "@openzeppelin/contracts/utils/Counters.sol";
-import "../../Game/Psychospheres.sol";
+import "../../Game/Interfaces/IPsychospheres.sol";
 import "./AssetsMarket.sol";
 
 contract PsychoMarket is AssetsMarket {
-     using Counters for Counters.Counter;
+    using Counters for Counters.Counter;
     Counters.Counter private _itemIds;
     Counters.Counter private _itemsSold;
 
-    Psychospheres public psychospheres;
+    IPsychospheres public psychospheres;
 
     function setPsychospheres(address _psychospheres) public isOwner {
-        psychospheres = Psychospheres(_psychospheres);
+        psychospheres = IPsychospheres(_psychospheres);
     }
 
     struct MarketPsychoItem {
@@ -42,17 +42,19 @@ contract PsychoMarket is AssetsMarket {
     // function getListingPrice() public view returns (uint256) {
     //     return listingPrice;
     // }
-  
+
   /* Places an item for sale on the marketplace */
     function createMarketPsychoItem(
         uint256 psychoId,
         uint256 price
-    ) public payable nonReentrant {
+    ) public {
         require(price > 0, "Price must be at least 1 wei");
 
         _itemIds.increment();
         uint256 itemId = _itemIds.current();
-  
+
+        psychospheres.transferPsychosphereFrom(msg.sender, address(this), psychoId);
+
         idToMarketPsychoItem[itemId] =  MarketPsychoItem(
             itemId,
             psychoId,
@@ -62,14 +64,12 @@ contract PsychoMarket is AssetsMarket {
             false
         );
 
-        psychospheres.transferPsychosphereFrom(msg.sender, address(this), psychoId);
-
         emit MarketPsychoItemCreated(
-            itemId, 
-            psychoId, 
-            msg.sender, 
-            address(0), 
-            price, 
+            itemId,
+            psychoId,
+            msg.sender,
+            address(0),
+            price,
             false
         );
   }
@@ -78,11 +78,9 @@ contract PsychoMarket is AssetsMarket {
   /* Transfers ownership of the item, as well as funds between parties */
     function createMarketPsychoSale(
         uint256 itemId
-    ) public payable nonReentrant {
+    ) public nonReentrant {
         uint256 price = idToMarketPsychoItem[itemId].price;
         uint256 psychoId = idToMarketPsychoItem[itemId].psychoId;
-        require(DBT.balanceOf(msg.sender) >= price, "Please submit the asking price in order to complete the purchase");
-        require(DBT.allowance(msg.sender, address(this)) >= price, "Contract cant do transfer from your account");
         DBT.transferFrom(msg.sender, idToMarketPsychoItem[itemId].seller, price);
         psychospheres.transferPsychosphere(msg.sender, psychoId);
         idToMarketPsychoItem[itemId].owner = payable(msg.sender);

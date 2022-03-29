@@ -5,9 +5,9 @@ pragma solidity 0.8.10;
 
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "../../Game/Assets.sol";
+import "../../Game/Interfaces/IAsset.sol";
 import "../../Utils/Owner.sol";
-import "../../Digibytes/Digibytes.sol";
+import "../../Digibytes/Interfaces/IBEP20.sol";
 
 contract AssetsMarket is ReentrancyGuard, Owner {
      using Counters for Counters.Counter;
@@ -15,15 +15,15 @@ contract AssetsMarket is ReentrancyGuard, Owner {
     Counters.Counter private _itemsSold;
 
     // address payable owner;
-    Assets public assetsContract;
-    Digibytes public DBT;
+    IAsset public assetsContract;
+    IBEP20 public DBT;
 
     function setAssets(address _assetsAddress) public isOwner {
-        assetsContract = Assets(_assetsAddress);
+        assetsContract = IAsset(_assetsAddress);
     }
 
     function setDBT(address _DBTAddress) public isOwner {
-        DBT = Digibytes(_DBTAddress);
+        DBT = IBEP20(_DBTAddress);
     }
 
     struct MarketAssetItem {
@@ -50,17 +50,19 @@ contract AssetsMarket is ReentrancyGuard, Owner {
     // function getListingPrice() public view returns (uint256) {
     //     return listingPrice;
     // }
-  
+
   /* Places an item for sale on the marketplace */
     function createMarketAssetItem(
         uint32 assetId,
         uint256 price
-    ) public payable nonReentrant {
+    ) public {
         require(price > 0, "Price must be at least 1 wei");
 
         _itemIds.increment();
         uint256 itemId = _itemIds.current();
-  
+
+        assetsContract.transferAssetFrom(msg.sender, address(this), assetId);
+
         idToMarketAssetItem[itemId] =  MarketAssetItem(
             itemId,
             assetId,
@@ -70,14 +72,12 @@ contract AssetsMarket is ReentrancyGuard, Owner {
             false
         );
 
-        assetsContract.transferAssetFrom(msg.sender, address(this), assetId);
-
         emit MarketAssetItemCreated(
-            itemId, 
-            assetId, 
-            msg.sender, 
-            address(0), 
-            price, 
+            itemId,
+            assetId,
+            msg.sender,
+            address(0),
+            price,
             false
         );
   }
@@ -88,13 +88,11 @@ contract AssetsMarket is ReentrancyGuard, Owner {
   /* Transfers ownership of the item, as well as funds between parties */
     function createMarketAssetSale(
         uint256 itemId
-    ) 
-        public nonReentrant 
+    )
+        public nonReentrant
     {
         uint256 price = idToMarketAssetItem[itemId].price;
         uint32 assetId = idToMarketAssetItem[itemId].assetId;
-        require(DBT.balanceOf(msg.sender) >= price, "Please submit the asking price in order to complete the purchase");
-        require(DBT.allowance(msg.sender, address(this)) >= price, "Contract cant do transfer from your account");
         DBT.transferFrom(address(msg.sender), address(idToMarketAssetItem[itemId].seller), price);
         assetsContract.transferAsset(msg.sender, assetId);
         idToMarketAssetItem[itemId].owner = payable(msg.sender);
